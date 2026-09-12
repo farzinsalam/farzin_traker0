@@ -115,13 +115,14 @@ def generate_frames():
             cv2.putText(annotated_frame, "SIMULATED THEFT: BOTTLE MISSING!", (50, 440),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
         else:
-            detections, annotated_frame = detector.detect(
+            annotated_frame, detections, count, fps = detector.detect(
                 frame,
                 draw_overlay=True,
                 guardian_state=guardian.state,
                 smile_info=guardian.last_smile_info
             )
             status, alert = guardian.update(len(detections), annotated_frame)
+
         
         # Encode frame as JPEG
         ret, buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -221,7 +222,7 @@ def start_tunnel_thread(port=5000):
         cmd = [
             "ssh", "-o", "StrictHostKeyChecking=no",
             "-o", "ServerAliveInterval=30",
-            "-R", f"80:localhost:{port}",
+            "-R", f"80:127.0.0.1:{port}",
             "nokey@localhost.run"
         ]
         try:
@@ -236,14 +237,16 @@ def start_tunnel_thread(port=5000):
                 match = re.search(r'https://[a-zA-Z0-9-]+\.lhr\.life', line)
                 if match:
                     public_tunnel_url = match.group(0)
-                    print("=" * 65)
+                    print("\n" + "=" * 65)
                     print("🎉 BOTTLEVISION PUBLIC WEB LINK IS LIVE!")
                     print(f"👉 {public_tunnel_url}")
                     print(f"👉 Local: http://localhost:{port}")
-                    print("=" * 65)
+                    print("=" * 65 + "\n")
                     break
+
         except Exception as e:
             print(f"[Tunnel] SSH tunnel note: {e}")
+
 
     t = threading.Thread(target=run_tunnel, daemon=True)
     t.start()
