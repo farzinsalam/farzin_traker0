@@ -367,7 +367,15 @@
     let bottlePresent = true;
     let currentStage = "ARMED"; // ARMED, ALARM, SMILE, CAPTCHA, THANOS, WATER_GRANTED
     let smilePct = 0;
-    let captchaCode = "W8R4";
+    const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    function generate4LetterCode() {
+      let code = "";
+      for (let i = 0; i < 4; i++) {
+        code += LETTERS[Math.floor(Math.random() * LETTERS.length)];
+      }
+      return code;
+    }
+    let captchaCode = generate4LetterCode();
     let isWebcamActive = false;
     let thanosStartTime = 0;
 
@@ -442,10 +450,11 @@
       currentStage = "CAPTCHA";
       updateHUD();
       document.getElementById('captcha-card').style.display = "flex";
-      captchaCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+      captchaCode = generate4LetterCode();
       document.getElementById('captcha-display').innerText = captchaCode;
-      speak("Smile verified! Now enter the security CAPTCHA.");
+      speak("Smile verified! Now enter the 4-letter security CAPTCHA.");
     }
+
 
     function submitCaptcha() {
       const val = document.getElementById('captcha-input').value.trim().toUpperCase();

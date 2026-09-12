@@ -574,11 +574,12 @@ HTML_PAGE = """
 
       <!-- Stage 3: Visual CAPTCHA -->
       <div class="captcha-box" id="captcha-section" style="display: none;">
-        <div style="font-weight: 700; color: #ffb700;">🧩 Security CAPTCHA Challenge</div>
-        <div style="font-size: 0.85rem; color: #8892b0;">Type the code shown below (or on camera):</div>
-        <input type="text" id="captcha-input" class="captcha-input" maxlength="4" placeholder="CODE">
+        <div style="font-weight: 700; color: #ffb700;">🧩 4-Letter Security CAPTCHA Challenge</div>
+        <div style="font-size: 0.85rem; color: #8892b0;">Type the 4-letter code shown on camera or below:</div>
+        <input type="text" id="captcha-input" class="captcha-input" maxlength="4" placeholder="CODE" style="text-transform: uppercase;">
         <button class="btn btn-gold" onclick="submitCaptcha()">SUBMIT CAPTCHA</button>
       </div>
+
 
       <!-- Stage 4: Thanos Pose & Snap -->
       <button class="btn btn-gold" onclick="triggerThanos()" id="thanos-btn" style="display: none;">

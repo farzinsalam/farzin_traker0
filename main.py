@@ -407,10 +407,10 @@ class CaptchaGenerator:
     """
     Generates visual security CAPTCHAs for Anti-Theft Bottle Guardian unlock.
     """
-    CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # Disambiguated (no 0/O, 1/I)
+    CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ"  # 100% Letters only (no digits 0-9, no I/O)
 
     @classmethod
-    def generate(cls, length: int = 5) -> tuple[str, Image.Image]:
+    def generate(cls, length: int = 4) -> tuple[str, Image.Image]:
         code = "".join(random.choice(cls.CHARS) for _ in range(length))
         w, h = 210, 58
         img = Image.new("RGB", (w, h), color=(21, 29, 42))  # #151D2A
@@ -420,7 +420,7 @@ class CaptchaGenerator:
         font = None
         for font_path in ("C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/arial.ttf", "arial.ttf"):
             try:
-                font = ImageFont.truetype(font_path, 26)
+                font = ImageFont.truetype(font_path, 28)
                 break
             except Exception:
                 pass
@@ -436,15 +436,15 @@ class CaptchaGenerator:
             draw.line([(x1, y1), (x2, y2)], fill=(50, 70, 95), width=1)
 
         # Noise speckles
-        for _ in range(120):
+        for _ in range(100):
             draw.point((random.randint(0, w - 1), random.randint(0, h - 1)), fill=(80, 100, 140))
 
-        # Colored characters with drop shadow
+        # Colored characters with drop shadow (perfect 4-letter spacing)
         char_colors = [(56, 189, 248), (251, 191, 36), (52, 211, 153), (244, 114, 182), (251, 146, 60), (167, 139, 250)]
-        spacing = (w - 24) // length
+        spacing = (w - 36) // length
         for i, ch in enumerate(code):
-            cx = 14 + i * spacing + random.randint(-2, 2)
-            cy = 12 + random.randint(-4, 4)
+            cx = 20 + i * spacing + random.randint(-2, 2)
+            cy = 10 + random.randint(-3, 3)
             draw.text((cx + 1, cy + 1), ch, fill=(10, 14, 20), font=font)
             draw.text((cx, cy), ch, fill=random.choice(char_colors), font=font)
 
@@ -2267,9 +2267,10 @@ def run_self_test():
 
     # 4. Test CAPTCHA Generator
     c_code, c_img = CaptchaGenerator.generate()
-    assert len(c_code) == 5
+    assert len(c_code) == 4 and c_code.isalpha()
     assert c_img is not None
-    print(f"✓ CaptchaGenerator verified: code '{c_code}', image size={c_img.size}")
+    print(f"✓ CaptchaGenerator verified: 4-letter code '{c_code}', image size={c_img.size}")
+
 
     # 5. Test Bottle Guardian, Smile, CAPTCHA & Thanos Snap Flow
     guardian = BottleGuardian(player, smile_detector=smile_detector, smile_threshold=30)
