@@ -86,7 +86,7 @@ For Hardware:
 For Software:
 # Installation
 1. **Clone the repository:**
-   ```bash
+   bash
    git clone https://github.com/farzinsalam/farzin_traker0.git
    cd farzin_traker0
 Create and activate a virtual environment (Recommended):
@@ -112,7 +112,7 @@ python main.py --test
 # Run
 ### 1. Quick Launch (One-Click on Windows)
 Simply double-click `run.bat` or run:
-```bash
+bash
 run.bat
 2. Standard GUI Dashboard
 Launch the full interactive computer-vision control panel:
@@ -160,12 +160,12 @@ For Software:
 ---
 # Diagrams
 ### Architecture & Security Workflow Diagram
-```mermaid
+mermaid
 flowchart TD
     A([Start: Bottle Placed on Desk]) --> B[YOLOv8 Neural Network Scans Scene]
     B --> C{Bottle Position Stored & Monitored}
     
-    %% Theft Subsystem
+Theft Subsystem
     C -->|Unauthorized Hand Reaches / Bottle Moved| D[THEFT DETECTED!]
     D --> E[Red Flashing HUD Siren Activated]
     E --> F[Audio Engine Blasts: 'കത്തി താഴെയിടെടാ!' Kireedam Alarm]
@@ -173,7 +173,7 @@ flowchart TD
     %% Authentication Subsystem
     C -->|User Presses 'W' / Asks for Water| G[Initiate Multi-Factor Hydration Auth]
     
-    %% Stage 1: Smile
+ Stage 1: Smile
     G --> H[Stage 1: Smile Verification]
     H --> I[YuNet AI Scans Face & Mouth Ratio]
     I --> J{Smile >= 80% Worthy?}
@@ -221,37 +221,37 @@ YOLOv8-Pose tracking the user’s arm and wrist keypoints in real-time. When the
 
 ### System Architecture & Security Workflow
 
-```mermaid
+mermaid
 flowchart TD
     Start([User Places Water Bottle on Desk]) --> YOLO[YOLOv8 Neural Network Scans Scene]
     YOLO --> Arm{Guardian Armed?}
     
-    %% ARMING
+  ARMING
     Arm -->|Yes| Lock[Lock Bottle Baseline Coordinates & Perimeter]
     
-    %% BRANCH 1: THEFT DETECTED
+  BRANCH 1: THEFT DETECTED
     Lock -->|Unauthorized Hand Approaches / Bottle Shifted| Theft[🚨 THEFT DETECTED!]
     Theft --> Siren[Activate Red Emergency Flashing HUD]
     Siren --> Alarm[Audio Engine Blasts: 'കത്തി താഴെയിടെടാ!' Kireedam Siren]
     Alarm --> Lock
     
-    %% BRANCH 2: AUTHENTICATION REQUEST
+   BRANCH 2: AUTHENTICATION REQUEST
     Lock -->|User Presses 'W' / 'I Want Water'| Auth[Initiate Multi-Factor Hydration Clearance]
     
-    %% STAGE 1: SMILE
+STAGE 1: SMILE
     Auth --> Step1[Stage 1: Smile Verification]
     Step1 --> FaceAI[YuNet Facial Neural Network Analyzes Face]
     FaceAI --> SmileCheck{Smile Ratio >= 80%?}
     SmileCheck -->|No| Step1
     SmileCheck -->|Yes| Step2[Stage 2: 4-Letter Security CAPTCHA]
     
-    %% STAGE 2: CAPTCHA
+ STAGE 2: CAPTCHA
     Step2 --> GenCap[Generate Randomized Distorted 4-Letter Code]
     GenCap --> CapCheck{User Inputs Correct 4 Letters?}
     CapCheck -->|Incorrect| GenCap
     CapCheck -->|Correct| Step3[Stage 3: Thanos Snap Protocol]
     
-    %% STAGE 3: THANOS
+   STAGE 3: THANOS
     Step3 --> PoseTrack[YOLOv8-Pose Detects Arm & Wrist Keypoints]
     PoseTrack --> Gauntlet[Overlay AR Infinity Gauntlet with 6 Stones]
     Gauntlet --> Audio[Play Audio Dialogue: 'And I... am... Iron Man']
