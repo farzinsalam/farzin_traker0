@@ -20,10 +20,10 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Temporary files
+# Temporary & Output files
 .tempmediaStorage/
 useless_project_temp/
 push.bat
 *.log
-
-
+captures/*
+!captures/.gitkeep
