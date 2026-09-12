@@ -597,7 +597,12 @@
       requestAnimationFrame(render);
     }
 
+    window.addEventListener('DOMContentLoaded', () => {
+      startWebcam();
+    });
+
     render();
   </script>
 </body>
 </html>
+

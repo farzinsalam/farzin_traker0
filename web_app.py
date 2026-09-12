@@ -22,9 +22,11 @@ import json
 import threading
 import subprocess
 import re
+import base64
 import cv2
 import numpy as np
 from PIL import Image
+
 
 from flask import Flask, Response, jsonify, request, send_from_directory, render_template_string
 
@@ -199,7 +201,61 @@ def arm_guardian():
         return jsonify({"success": True, "state": guardian.state})
     return jsonify({"success": False})
 
+@app.route('/api/process_frame', methods=['POST'])
+def process_frame():
+    global simulated_no_bottle, detector, guardian
+    file = request.files.get('frame')
+    if not file:
+        return jsonify({"error": "No frame received"}), 400
+    
+    in_memory_file = io.BytesIO()
+    file.save(in_memory_file)
+    data = np.frombuffer(in_memory_file.getvalue(), dtype=np.uint8)
+    frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    if frame is None:
+        return jsonify({"error": "Decode failed"}), 400
+    
+    # Mirror frame for natural selfie webcam view
+    frame = cv2.flip(frame, 1)
+
+    if simulated_no_bottle:
+        detections = []
+        annotated_frame = frame.copy()
+        status, alert = guardian.update(0, annotated_frame)
+        cv2.putText(annotated_frame, "SIMULATED THEFT: BOTTLE MISSING!", (50, 440),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
+    else:
+        annotated_frame, detections, count, fps = detector.detect(
+            frame,
+            draw_overlay=True,
+            guardian_state=guardian.state,
+            smile_info=guardian.last_smile_info
+        )
+        status, alert = guardian.update(len(detections), annotated_frame)
+    
+    # Encode annotated frame to JPEG
+    ret, buffer = cv2.imencode('.jpg', annotated_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+    if not ret:
+        return jsonify({"error": "Encode failed"}), 500
+    
+    b64 = base64.b64encode(buffer).decode('utf-8')
+    info = guardian.last_smile_info if guardian else {}
+
+    return jsonify({
+        "image": f"data:image/jpeg;base64,{b64}",
+        "state": guardian.state,
+        "bottle_count": len(detections) if not simulated_no_bottle else 0,
+        "smile_pct": info.get("smile_pct", 0),
+        "threshold": info.get("threshold", 30),
+        "captcha_active": info.get("captcha_active", False),
+        "captcha_code": guardian.current_captcha_code if guardian else "",
+        "thanos_active": info.get("thanos_active", False),
+        "water_granted": info.get("granted", False),
+        "alert_playing": guardian.player.is_playing if (guardian and guardian.player) else False
+    })
+
 @app.route('/sounds/<path:filename>')
+
 def serve_sounds(filename):
     return send_from_directory(os.path.join(BASE_DIR, "sounds"), filename)
 
@@ -538,15 +594,18 @@ HTML_PAGE = """
     <!-- Camera Stream Card -->
     <div class="stream-card">
       <div class="stream-wrapper">
-        <img class="stream-img" src="/video_feed" alt="BottleVision AI Feed">
+        <video id="device-video" playsinline autoplay muted style="display:none;"></video>
+        <canvas id="device-canvas" style="display:none;"></canvas>
+        <img id="stream-img" class="stream-img" src="/video_feed" alt="BottleVision AI Feed">
         <div class="hud-overlay">
-          <div class="hud-pill" id="live-indicator" style="color: #00ff88;">● LIVE STREAM</div>
+          <div class="hud-pill" id="live-indicator" style="color: #00ff88;">● STARTING DEVICE CAM...</div>
           <div class="hud-pill" id="hud-status">SYSTEM ARMED</div>
         </div>
       </div>
-      <div style="padding: 16px; width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.3);">
-        <button class="btn btn-danger" onclick="toggleTheft()" id="theft-btn">🚨 SIMULATE THEFT</button>
-        <button class="btn" onclick="armSystem()">🛡️ RE-ARM GUARDIAN</button>
+      <div style="padding: 14px; width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.3); gap: 10px; flex-wrap: wrap;">
+        <button class="btn" onclick="toggleCameraSource()" id="cam-toggle-btn" style="flex: 1; min-width: 170px;">📱 USING DEVICE CAM</button>
+        <button class="btn btn-danger" onclick="toggleTheft()" id="theft-btn" style="flex: 1; min-width: 170px;">🚨 SIMULATE THEFT</button>
+        <button class="btn" onclick="armSystem()" style="flex: 1; min-width: 140px;">🛡️ RE-ARM</button>
       </div>
     </div>
 
@@ -604,73 +663,167 @@ HTML_PAGE = """
     let currentState = "ARMED";
     let lastAlertPlaying = false;
     let waterModalShown = false;
+    let useDeviceCam = true;
+    let deviceStream = null;
+    let isProcessing = false;
 
-    // Polling status loop
+    // Start visitor device camera automatically
+    async function startDeviceCamera() {
+      try {
+        deviceStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+          audio: false
+        });
+        const video = document.getElementById('device-video');
+        video.srcObject = deviceStream;
+        await video.play();
+        useDeviceCam = true;
+        document.getElementById('live-indicator').innerText = "● DEVICE CAM (AI ACTIVE)";
+        document.getElementById('live-indicator').style.color = "#00ff88";
+        document.getElementById('cam-toggle-btn').innerText = "🖥️ SWITCH TO SERVER CAM";
+        sendNextFrame();
+      } catch (e) {
+        console.warn("Could not access device camera, falling back to server stream:", e);
+        fallbackToServerCam();
+      }
+    }
+
+    function fallbackToServerCam() {
+      useDeviceCam = false;
+      if (deviceStream) {
+        deviceStream.getTracks().forEach(track => track.stop());
+        deviceStream = null;
+      }
+      document.getElementById('stream-img').src = "/video_feed";
+      document.getElementById('live-indicator').innerText = "● SERVER CAM ACTIVE";
+      document.getElementById('live-indicator').style.color = "#00f0ff";
+      document.getElementById('cam-toggle-btn').innerText = "📱 SWITCH TO DEVICE CAM";
+    }
+
+    function toggleCameraSource() {
+      if (useDeviceCam) {
+        fallbackToServerCam();
+      } else {
+        startDeviceCamera();
+      }
+    }
+
+    // Stream visitor's device camera frames to Python backend for real-time AI inference
+    function sendNextFrame() {
+      if (!useDeviceCam) return;
+      const video = document.getElementById('device-video');
+      if (video.readyState >= 2 && !isProcessing) {
+        isProcessing = true;
+        const canvas = document.getElementById('device-canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) { isProcessing = false; requestAnimationFrame(sendNextFrame); return; }
+          const formData = new FormData();
+          formData.append('frame', blob, 'frame.jpg');
+
+          try {
+            const res = await fetch('/api/process_frame', { method: 'POST', body: formData });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.image) {
+                document.getElementById('stream-img').src = data.image;
+              }
+              applyState(data);
+            }
+          } catch (err) {
+            console.error("Frame processing error:", err);
+          } finally {
+            isProcessing = false;
+            if (useDeviceCam) {
+              setTimeout(sendNextFrame, 35); // ~28 FPS
+            }
+          }
+        }, 'image/jpeg', 0.70);
+      } else {
+        if (useDeviceCam) {
+          setTimeout(sendNextFrame, 35);
+        }
+      }
+    }
+
+    function applyState(data) {
+      currentState = data.state;
+      const stateEl = document.getElementById('state-text');
+      const hudEl = document.getElementById('hud-status');
+      stateEl.innerText = data.state;
+      hudEl.innerText = data.state;
+
+      if (data.state === 'THEFT_ALERT') {
+        stateEl.style.color = '#ff0055';
+        hudEl.style.color = '#ff0055';
+        if (!lastAlertPlaying && data.alert_playing) {
+          playAlarmSound();
+        }
+      } else if (data.state === 'WATER_GRANTED') {
+        stateEl.style.color = '#00ffcc';
+        hudEl.style.color = '#00ffcc';
+        if (!waterModalShown) {
+          showWaterModal();
+        }
+      } else {
+        stateEl.style.color = '#00ff88';
+        hudEl.style.color = '#00ff88';
+        if (data.state === 'ARMED') {
+          waterModalShown = false;
+          document.getElementById('water-modal').style.display = 'none';
+        }
+      }
+      lastAlertPlaying = data.alert_playing;
+
+      // Smile meter
+      const smileBar = document.getElementById('smile-bar');
+      const smilePct = document.getElementById('smile-pct-text');
+      smileBar.style.width = data.smile_pct + '%';
+      smilePct.innerText = data.smile_pct + '%';
+
+      // 4-Letter CAPTCHA visibility
+      const captchaSec = document.getElementById('captcha-section');
+      if (data.captcha_active) {
+        captchaSec.style.display = 'flex';
+        if (data.captcha_code && !document.getElementById('captcha-input').placeholder.includes(data.captcha_code)) {
+          document.getElementById('captcha-input').placeholder = data.captcha_code;
+        }
+      } else {
+        captchaSec.style.display = 'none';
+      }
+
+      // Thanos button visibility
+      const thanosBtn = document.getElementById('thanos-btn');
+      if (data.state === 'THANOS_POSE' || data.thanos_active) {
+        thanosBtn.style.display = 'flex';
+      } else {
+        thanosBtn.style.display = 'none';
+      }
+    }
+
+    // Polling status loop for server camera mode
     async function updateState() {
+      if (useDeviceCam) return;
       try {
         const res = await fetch('/api/state');
         const data = await res.json();
-        currentState = data.state;
-
-        // Update state label
-        const stateEl = document.getElementById('state-text');
-        const hudEl = document.getElementById('hud-status');
-        stateEl.innerText = data.state;
-        hudEl.innerText = data.state;
-
-        if (data.state === 'THEFT_ALERT') {
-          stateEl.style.color = '#ff0055';
-          hudEl.style.color = '#ff0055';
-          if (!lastAlertPlaying && data.alert_playing) {
-            playAlarmSound();
-          }
-        } else if (data.state === 'WATER_GRANTED') {
-          stateEl.style.color = '#00ffcc';
-          hudEl.style.color = '#00ffcc';
-          if (!waterModalShown) {
-            showWaterModal();
-          }
-        } else {
-          stateEl.style.color = '#00ff88';
-          hudEl.style.color = '#00ff88';
-          if (data.state === 'ARMED') {
-            waterModalShown = false;
-            document.getElementById('water-modal').style.display = 'none';
-          }
-        }
-        lastAlertPlaying = data.alert_playing;
-
-        // Smile meter
-        const smileBar = document.getElementById('smile-bar');
-        const smilePct = document.getElementById('smile-pct-text');
-        smileBar.style.width = data.smile_pct + '%';
-        smilePct.innerText = data.smile_pct + '%';
-
-        // CAPTCHA visibility
-        const captchaSec = document.getElementById('captcha-section');
-        if (data.captcha_active) {
-          captchaSec.style.display = 'flex';
-          if (data.captcha_code && !document.getElementById('captcha-input').placeholder.includes(data.captcha_code)) {
-            document.getElementById('captcha-input').placeholder = data.captcha_code;
-          }
-        } else {
-          captchaSec.style.display = 'none';
-        }
-
-        // Thanos button visibility
-        const thanosBtn = document.getElementById('thanos-btn');
-        if (data.state === 'THANOS_POSE' || data.thanos_active) {
-          thanosBtn.style.display = 'flex';
-        } else {
-          thanosBtn.style.display = 'none';
-        }
-
+        applyState(data);
       } catch (e) {
         console.error("State update error:", e);
       }
     }
 
     setInterval(updateState, 500);
+
+    // Auto-start device camera when page loads
+    window.addEventListener('DOMContentLoaded', () => {
+      startDeviceCamera();
+    });
+
 
     async function requestWater() {
       await fetch('/api/request_water', { method: 'POST' });
