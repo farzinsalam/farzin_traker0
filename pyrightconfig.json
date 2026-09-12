@@ -1,0 +1,10 @@
+{
+  "include": [
+    "."
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "C:\\Users\\Farzin Salam\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
+  ]
+}

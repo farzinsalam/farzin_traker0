@@ -1,0 +1,5 @@
+[tool.pyrefly]
+python-interpreter-path = ".venv/Scripts/python.exe"
+site-package-path = [
+    "C:/Users/Farzin Salam/AppData/Local/Programs/Python/Python311/Lib/site-packages"
+]
