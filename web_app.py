@@ -215,8 +215,11 @@ def process_frame():
     if frame is None:
         return jsonify({"error": "Decode failed"}), 400
     
-    # Mirror frame for natural selfie webcam view
-    frame = cv2.flip(frame, 1)
+    # Mirror only if using front selfie camera
+    facing_mode = request.form.get('facing_mode', 'environment')
+    if facing_mode == 'user':
+        frame = cv2.flip(frame, 1)
+
 
     if simulated_no_bottle:
         detections = []
@@ -593,19 +596,28 @@ HTML_PAGE = """
   <div class="container">
     <!-- Camera Stream Card -->
     <div class="stream-card">
-      <div class="stream-wrapper">
+      <div class="stream-wrapper" onclick="handleStreamClick()" style="cursor: pointer; position: relative;">
         <video id="device-video" playsinline autoplay muted style="display:none;"></video>
         <canvas id="device-canvas" style="display:none;"></canvas>
         <img id="stream-img" class="stream-img" src="/video_feed" alt="BottleVision AI Feed">
+        
+        <!-- Mobile Tap To Start Overlay -->
+        <div id="phone-tap-overlay" style="display: none; position: absolute; top:0; left:0; right:0; bottom:0; background: rgba(5,10,20,0.85); flex-direction: column; align-items: center; justify-content: center; z-index: 20; text-align: center; padding: 20px;">
+          <div style="font-size: 3.5rem; margin-bottom: 12px;">📱</div>
+          <div style="font-family: 'Orbitron', sans-serif; font-size: 1.3rem; font-weight: 800; color: #00ff88; margin-bottom: 8px;">TAP TO USE PHONE CAMERA</div>
+          <div style="font-size: 0.95rem; color: #d0f4ff; max-width: 280px;">Tap anywhere to allow phone camera permission</div>
+        </div>
+
         <div class="hud-overlay">
-          <div class="hud-pill" id="live-indicator" style="color: #00ff88;">● STARTING DEVICE CAM...</div>
+          <div class="hud-pill" id="live-indicator" style="color: #00ff88;">● STARTING PHONE CAM...</div>
           <div class="hud-pill" id="hud-status">SYSTEM ARMED</div>
         </div>
       </div>
       <div style="padding: 14px; width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.3); gap: 10px; flex-wrap: wrap;">
-        <button class="btn" onclick="toggleCameraSource()" id="cam-toggle-btn" style="flex: 1; min-width: 170px;">📱 USING DEVICE CAM</button>
-        <button class="btn btn-danger" onclick="toggleTheft()" id="theft-btn" style="flex: 1; min-width: 170px;">🚨 SIMULATE THEFT</button>
-        <button class="btn" onclick="armSystem()" style="flex: 1; min-width: 140px;">🛡️ RE-ARM</button>
+        <button class="btn" onclick="startDeviceCamera()" id="cam-toggle-btn" style="flex: 1; min-width: 150px;">📱 PHONE CAM</button>
+        <button class="btn btn-gold" onclick="flipCamera()" id="cam-flip-btn" style="flex: 1; min-width: 140px;">🔄 FLIP (BACK/FRONT)</button>
+        <button class="btn btn-danger" onclick="toggleTheft()" id="theft-btn" style="flex: 1; min-width: 130px;">🚨 SIMULATE THEFT</button>
+        <button class="btn" onclick="armSystem()" style="flex: 1; min-width: 110px;">🛡️ RE-ARM</button>
       </div>
     </div>
 
@@ -663,28 +675,55 @@ HTML_PAGE = """
     let currentState = "ARMED";
     let lastAlertPlaying = false;
     let waterModalShown = false;
+    let currentFacingMode = "environment"; // default to phone back camera pointing at desk
     let useDeviceCam = true;
     let deviceStream = null;
     let isProcessing = false;
 
+    function handleStreamClick() {
+      if (!deviceStream || !useDeviceCam) {
+        startDeviceCamera();
+      }
+    }
+
+    async function flipCamera() {
+      currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+      const btn = document.getElementById('cam-flip-btn');
+      btn.innerText = (currentFacingMode === "user") ? "🔄 FRONT (SELFIE)" : "🔄 BACK (DESK)";
+      await startDeviceCamera();
+    }
+
     // Start visitor device camera automatically
     async function startDeviceCamera() {
+      const overlay = document.getElementById('phone-tap-overlay');
+      overlay.style.display = 'none';
+      if (deviceStream) {
+        deviceStream.getTracks().forEach(track => track.stop());
+        deviceStream = null;
+      }
       try {
-        deviceStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+        const constraints = {
+          video: {
+            facingMode: { ideal: currentFacingMode },
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
           audio: false
-        });
+        };
+        deviceStream = await navigator.mediaDevices.getUserMedia(constraints);
         const video = document.getElementById('device-video');
         video.srcObject = deviceStream;
         await video.play();
         useDeviceCam = true;
-        document.getElementById('live-indicator').innerText = "● DEVICE CAM (AI ACTIVE)";
+        const camLabel = (currentFacingMode === "user") ? "FRONT (SELFIE)" : "BACK (DESK)";
+        document.getElementById('live-indicator').innerText = `● PHONE ${camLabel} AI ACTIVE`;
         document.getElementById('live-indicator').style.color = "#00ff88";
-        document.getElementById('cam-toggle-btn').innerText = "🖥️ SWITCH TO SERVER CAM";
+        document.getElementById('cam-toggle-btn').innerText = `📱 PHONE ${camLabel}`;
+        overlay.style.display = 'none';
         sendNextFrame();
       } catch (e) {
-        console.warn("Could not access device camera, falling back to server stream:", e);
-        fallbackToServerCam();
+        console.warn("Could not access device camera automatically:", e);
+        overlay.style.display = 'flex';
       }
     }
 
@@ -694,10 +733,11 @@ HTML_PAGE = """
         deviceStream.getTracks().forEach(track => track.stop());
         deviceStream = null;
       }
+      document.getElementById('phone-tap-overlay').style.display = 'none';
       document.getElementById('stream-img').src = "/video_feed";
       document.getElementById('live-indicator').innerText = "● SERVER CAM ACTIVE";
       document.getElementById('live-indicator').style.color = "#00f0ff";
-      document.getElementById('cam-toggle-btn').innerText = "📱 SWITCH TO DEVICE CAM";
+      document.getElementById('cam-toggle-btn').innerText = "📱 SWITCH TO PHONE CAM";
     }
 
     function toggleCameraSource() {
@@ -708,7 +748,7 @@ HTML_PAGE = """
       }
     }
 
-    // Stream visitor's device camera frames to Python backend for real-time AI inference
+    // Stream phone camera frames to Python backend for real-time AI inference
     function sendNextFrame() {
       if (!useDeviceCam) return;
       const video = document.getElementById('device-video');
@@ -724,6 +764,7 @@ HTML_PAGE = """
           if (!blob) { isProcessing = false; requestAnimationFrame(sendNextFrame); return; }
           const formData = new FormData();
           formData.append('frame', blob, 'frame.jpg');
+          formData.append('facing_mode', currentFacingMode);
 
           try {
             const res = await fetch('/api/process_frame', { method: 'POST', body: formData });
@@ -749,6 +790,7 @@ HTML_PAGE = """
         }
       }
     }
+
 
     function applyState(data) {
       currentState = data.state;
