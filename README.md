@@ -265,11 +265,9 @@ STAGE 1: SMILE
 
 ### Project Demo
 # Video
-[Add your demo video link here]
-*Explain what the video demonstrates*
+https://drive.google.com/drive/folders/1fn0q-5VX7WU-k82f30-Bfbxv3rOuH6Vq?usp=sharing
 
-# Additional Demos
-[Add any extra demo materials/links]
+
 
 
 ---
